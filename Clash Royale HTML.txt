@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Mini-Royale — rozbudowana wersja</title>
+<style>
+:root{
+  --bg:#071821; --arena:#0b3a4a; --glass:rgba(255,255,255,0.06);
+  --player:#6bf07a; --enemy:#ff8b8b; --water:#1b6b8a;
+  --marker-ok:rgba(110,255,150,0.35); --marker-bad:rgba(255,90,90,0.35);
+}
+html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#042233);font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#e6fbff}
+.wrap{max-width:980px;margin:16px auto;padding:12px}
+h1{font-size:20px;margin:6px 0 12px}
+.stage{background:linear-gradient(180deg,var(--arena),#083248);padding:12px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.6);position:relative}
+.battlefield{height:460px;border-radius:10px;position:relative;overflow:hidden;background:
+  linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.03));padding:6px}
+
+/* water channel across center */
+.water{position:absolute;left:0;right:0;top:43%;height:14%;background:linear-gradient(180deg,#0f6c85,#0b5571);opacity:0.98;border-top:2px solid rgba(255,255,255,0.03);border-bottom:2px solid rgba(0,0,0,0.2);z-index:1}
+
+/* bridges (left/right) - holes in water where ground can pass */
+.bridge{position:absolute;width:18%;height:100%;top:0;left:6%;transform:translateY(-2%);background:transparent;z-index:2}
+.bridge.right{left:auto;right:6%}
+
+/* towers */
+.tower{position:absolute;width:84px;height:84px;border-radius:10px;background:var(--glass);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-weight:800;box-shadow:0 6px 16px rgba(0,0,0,0.5);border:2px solid rgba(255,255,255,0.03);z-index:3}
+.tower.player{border-color:rgba(107,240,122,0.28)}
+.tower.enemy{border-color:rgba(255,107,107,0.22)}
+.tower .hp{font-size:13px;margin-top:6px}
+
+/* main towers slightly bigger */
+.tower.king{width:110px;height:110px;border-radius:12px;font-size:20px}
+
+/* unit */
+.unit{position:absolute;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#111;z-index:4;pointer-events:none}
+.unit.tank{width:72px;height:72px;border-radius:12px;font-size:26px}
+.unit.player{background:linear-gradient(180deg,var(--player),#3dbf4f)}
+.unit.enemy{background:linear-gradient(180deg,var(--enemy),#ff8b8b)}
+.unit.flying{border:2px dashed rgba(0,0,0,0.08);box-shadow:0 8px 18px rgba(0,0,0,0.35)}
+
+/* HUD */
+.hud{display:flex;gap:12px;margin-top:12px;align-items:center}
+.elixir{flex:1;background:rgba(0,0,0,0.2);padding:8px;border-radius:10px;display:flex;align-items:center;gap:8px}
+.elixir .bar{height:8px;background:rgba(255,255,255,0.06);border-radius:6px;flex:1;overflow:hidden}
+.elixir .bar .fill{height:100%;width:0%;background:linear-gradient(90deg,#8ef5a3,#2bdc6c);transition:width .2s}
+.deck{display:flex;gap:8px}
+.card{width:86px;height:110px;border-radius:10px;background:linear-gradient(180deg,#fff,#f2f2f2);box-shadow:0 6px 18px rgba(0,0,0,0.4);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px;cursor:pointer;user-select:none;position:relative;z-index:6}
+.card .emoji{font-size:34px}.card .name{font-size:12px;color:#222}.card .cost{background:#111;color:#fff;padding:4px 8px;border-radius:8px;font-weight:800}
+
+/* spawn marker */
+.spawnMarker{position:absolute;width:56px;height:56px;border-radius:8px;pointer-events:none;z-index:9;display:flex;align-items:center;justify-content:center;font-weight:800}
+.spawnMarker.ok{background:var(--marker-ok);border:2px solid rgba(40,200,80,0.8)}
+.spawnMarker.bad{background:var(--marker-bad);border:2px solid rgba(200,40,40,0.9)}
+
+/* log */
+.log{margin-top:10px;color:#cfeefd;font-size:13px;min-height:28px}
+
+/* small */
+@media (max-width:720px){.battlefield{height:380px}.card{width:72px;height:96px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Klasz Rojal wersja 1.1.0</h1>
+  <div class="stage">
+    <div class="battlefield" id="battlefield">
+      <div class="water" id="water"></div>  
+      <div class="bridge left" id="bridge-left"></div>
+      <div class="bridge right" id="bridge-right"></div>
+
+      <!-- enemy towers (top) -->
+      <div class="tower enemy" id="enemy-left" style="left:16px; top:26px" data-side="enemy">
+        <div>🏯</div><div class="hp" id="enemy-left-hp">HP: 600</div>
+      </div>
+      <div class="tower enemy king" id="enemy-king" style="left:calc(50% - 55px); top:8px" data-side="enemy">
+        <div>👑</div><div class="hp" id="enemy-king-hp">HP: 3000</div>
+      </div>
+      <div class="tower enemy" id="enemy-right" style="right:16px; top:26px" data-side="enemy">
+        <div>🏯</div><div class="hp" id="enemy-right-hp">HP: 600</div>
+      </div>
+
+      <!-- player towers (bottom) -->
+      <div class="tower player" id="player-left" style="left:16px; bottom:26px" data-side="player">
+        <div>🏯</div><div class="hp" id="player-left-hp">HP: 600</div>
+      </div>
+      <div class="tower player king" id="player-king" style="left:calc(50% - 55px); bottom:8px" data-side="player">
+        <div>👑</div><div class="hp" id="player-king-hp">HP: 3000</div>
+      </div>
+      <div class="tower player" id="player-right" style="right:16px; bottom:26px" data-side="player">
+        <div>🏯</div><div class="hp" id="player-right-hp">HP: 600</div>
+      </div>
+
+      <!-- spawn marker (created dynamically) -->
+
+    </div>
+
+    <div class="hud">
+      <div class="elixir">
+        <div style="font-size:13px;font-weight:700;color:#fff">Eliksir</div>
+        <div class="bar"><div class="fill" id="elixir-fill"></div></div>
+        <div class="count" id="elixir-count">0 / 100</div>
+      </div>
+
+      <div class="deck" id="deck"></div>
+    </div>
+
+    <div class="log" id="log">Entiertaiment purpose only. This is not a official version of Clash Royale made by Supercell. Copyright Daniil Mikulich 2025. All Rights Reserved.</div>
+  </div>
+</div>
+
+<script>
+/* Ulepszona wersja Mini-Royale
+ - 3 wieże na stronę (lewa/prawa/king)
+ - spawn przez kliknięcie karty -> pokaz marker -> kliknięcie potwierdza
+ - wodny kanał w środku (przejście tylko na mostach)
+ - jednostki naziemne idą do mostu, jeżeli trafiają na wodę
+ - fire = latający pocisk z animacją od king tower do celu
+ - p = refill do max eliksiru
+ - jednostki celują w najbliższego wroga (jednostkę lub wieżę)
+*/
+
+/* --- konfiguracja kart --- */
+const cardTemplates = [
+  { id:'bomb', name:'Bomba', emoji:'💣', cost:97, hp:100000,  dmg:100000, speed:0.007, type:'bum!', tank:true},
+  { id:'sigma',  name:'Sigmuś',  emoji:'🤫️', cost:56, hp:520, dmg:72, speed:1.0, type:'ground', tank:true},
+  { id:'fire',   name:'Flamuś',emoji:'🔥', cost:12, hp:80,  dmg:48, speed:3.8, type:'flying', tank:false},
+    { id:'67', name:'67', emoji:'6️7️⃣', cost:67, hp:67, dmg:67, speed:6.7, type:'ground'},
+//poniżej są postacie dla AI
+   { id:'secretAI', name:'sai', emoji:'❓🤖', cost:11, hp:100, dmg:100, speed:0.05, type:'ground'},
+   { id:'briker', name:'briker', emoji:'🧱', cost:11, hp:99999999, dmg:10000, speed:0.0001, type:'flying'}
+];
+
+const MAX_ELIXIR = 100;
+let elixir = 0;
+let elixirFillEl, elixirCountEl, deckEl, battlefield, logEl;
+let units = []; // aktywne jednostki
+let gameOver = false
+
+/* wieże */
+const towers = {
+  'enemy-left': {hp:300, el: null},
+  'enemy-king': {hp:600, el: null, isKing:true},
+  'enemy-right': {hp:300, el: null},
+  'player-left': {hp:300, el: null},
+  'player-king': {hp:600, el: null, isKing:true},
+  'player-right': {hp:300, el: null}
+};
+
+/* elementy mapy */
+let waterEl, bridgeLeftEl, bridgeRightEl;
+
+/* spawn state */
+let spawnMode = null; // {template, markerEl}
+let markerEl = null;
+
+/* AI elixir */
+window.aiElixir = 1;
+
+/* utility */
+function qs(id){ return document.getElementById(id); }
+function log(text){ if(logEl) logEl.textContent = text; }
+
+/* setup UI */
+function setup(){
+  battlefield = qs('battlefield');
+  deckEl = qs('deck');
+  elixirFillEl = qs('elixir-fill');
+  elixirCountEl = qs('elixir-count');
+  logEl = qs('log');
+  waterEl = qs('water');
+  bridgeLeftEl = qs('bridge-left');
+  bridgeRightEl = qs('bridge-right');
+
+  // attach tower elements to towers state
+  Object.keys(towers).forEach(id=>{
+    const el = qs(id + (id.includes('player') || id.includes('enemy') ? '' : '')) || qs(id);
+    towers[id].el = qs(id + '-hp') || towers[id].el;
+  });
+
+  // create deck UI
+  const deck = [cardTemplates[0],cardTemplates[1],cardTemplates[2],cardTemplates[3]];
+  deck.forEach(tpl=>{
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = tpl.id;
+    card.innerHTML = `<div class="emoji">${tpl.emoji}</div><div class="name">${tpl.name}</div><div class="cost">${tpl.cost}</div>`;
+    card.addEventListener('click', ()=>enterSpawnMode(tpl, card));
+    deckEl.appendChild(card);
+  });
+
+  // mouse move to update marker
+  battlefield.addEventListener('mousemove', onBattleMouseMove);
+  battlefield.addEventListener('click', onBattleClick);
+
+  // keyboard p refill
+  document.addEventListener('keydown',(p)=>{
+    if(e.key === 'p'){ elixir = MAX_ELIXIR; updateElixirUI(); log('Eliksir uzupełniony do maksimum (test)'); }
+  })
+
+  // start loops
+  requestAnimationFrame(loop);
+  startElixir();
+  startAI();
+}
+
+/* --- elixir regen --- */
+function startElixir(){
+  setInterval(()=>{
+    if(gameOver) return;
+    if(elixir < MAX_ELIXIR){ elixir = Math.min(MAX_ELIXIR, elixir + 1); updateElixirUI(); }
+  },800);
+}
+function updateElixirUI(){
+  const pct = (elixir / MAX_ELIXIR)*100;
+  elixirFillEl.style.width = pct + '%';
+  elixirCountEl.textContent = elixir + ' / ' + MAX_ELIXIR;
+}
+
+/* --- spawn mode (player) --- */
+function enterSpawnMode(template, cardEl){
+  if(gameOver) return;
+  spawnMode = {template};
+  if(markerEl) markerEl.remove();
+  markerEl = document.createElement('div');
+  markerEl.className = 'spawnMarker';
+  markerEl.style.width = '56px'; markerEl.style.height = '56px';
+  markerEl.innerText = template.emoji;
+  battlefield.appendChild(markerEl);
+  log(`Tryb spawn: ${template.name}. Kliknij, aby wybrać miejsce.`);
+}
+
+/* battlefield mouse move -> update marker position + validity */
+function onBattleMouseMove(ev){
+  if(!spawnMode || !markerEl) return;
+  const bf = battlefield.getBoundingClientRect();
+  let x = ev.clientX - bf.left;
+  let y = ev.clientY - bf.top;
+  // clamp
+  x = Math.max(8, Math.min(bf.width-8, x));
+  y = Math.max(8, Math.min(bf.height-8, y));
+  markerEl.style.left = (x - 28) + 'px';
+  markerEl.style.top = (y - 28) + 'px';
+
+  // check validity: cannot spawn on enemy half (y < bf.height/2)
+  const isTopHalf = (y < bf.height/2);
+  // check water area: waterEl position relative to battlefield
+  const waterRect = waterEl.getBoundingClientRect();
+  const bfTop = bf.top;
+  const markerClientX = ev.clientX;
+  const markerClientY = ev.clientY;
+  let overWater = false;
+  // treat marker center point
+  if(markerClientY >= waterRect.top && markerClientY <= waterRect.bottom){
+    // if it's over bridge zones, allowed; otherwise over water
+    const bl = bridgeLeftEl.getBoundingClientRect();
+    const br = bridgeRightEl.getBoundingClientRect();
+    if(!(markerClientX >= bl.left && markerClientX <= bl.right) && !(markerClientX >= br.left && markerClientX <= br.right)){
+      overWater = true;
+    }
+  }
+
+  // also disallow spawning if on opponent half (top) for player
+  let ok = true;
+  if(isTopHalf) ok = false;
+  if(overWater && spawnMode.template.type !== 'flying') ok = false;
+
+  // set marker style
+  markerEl.className = 'spawnMarker ' + (ok ? 'ok':'bad');
+}
+
+/* click on battlefield to confirm spawn */
+function onBattleClick(ev){
+  if(!spawnMode || !markerEl) return;
+  const bf = battlefield.getBoundingClientRect();
+  const x = ev.clientX - bf.left;
+  const y = ev.clientY - bf.top;
+
+  // reuse validation from move
+  const isTopHalf = (y < bf.height/2);
+  const waterRect = waterEl.getBoundingClientRect();
+  const markerClientX = ev.clientX, markerClientY = ev.clientY;
+  let overWater = false;
+  if(markerClientY >= waterRect.top && markerClientY <= waterRect.bottom){
+    const bl = bridgeLeftEl.getBoundingClientRect(), br = bridgeRightEl.getBoundingClientRect();
+    if(!(markerClientX >= bl.left && markerClientX <= bl.right) && !(markerClientX >= br.left && markerClientX <= br.right)){
+      overWater = true;
+    }
+  }
+  let ok = true;
+  if(isTopHalf) ok = false;
+  if(overWater && spawnMode.template.type !== 'flying') ok = false;
+
+  if(!ok){
+    log('Nie można spawnąć tutaj — zła strefa (woda / połowa przeciwnika).');
+    // quick feedback: flash marker red
+    markerEl.className = 'spawnMarker bad';
+    return;
+  }
+
+  // check elixir
+  if(elixir < spawnMode.template.cost){
+    log('Za mało eliksiru!');
+    return;
+  }
+  elixir -= spawnMode.template.cost; updateElixirUI();
+
+  // compute spawn coordinates in percentages
+  const bfW = bf.width, bfH = bf.height;
+  const leftPct = (x / bfW) * 100, topPct = (y / bfH) * 100;
+
+  // special handling for fire: spawn projectile from player's king tower to target, then spawn flying unit there
+  if(spawnMode.template.id === 'fire'){
+    fireProjectileTo({leftPct, topPct});
+    spawnMode = null; markerEl.remove(); markerEl = null;
+    log('Zagrywasz Płomień — lot do celu!');
+    return;
+  }
+
+  // spawn ground unit at clicked position (player side)
+  spawnUnitAt(spawnMode.template, 'player', {leftPct, topPct});
+  spawnMode = null; markerEl.remove(); markerEl = null;
+  log('Zagrywasz ' + spawnMode?.template?.name || 'jednostkę');
+}
+
+/* spawn unit at percent coordinates for side */
+function spawnUnitAt(template, side, pct){
+  const el = document.createElement('div');
+  el.className = 'unit ' + (side === 'player' ? 'player':'enemy') + (template.type === 'flying' ? ' flying' : '') + (template.tank ? ' tank' : '');
+  el.innerText = template.emoji;
+  battlefield.appendChild(el);
+
+  // convert pct to pixels relative to battlefield (place center)
+  const bf = battlefield.getBoundingClientRect();
+  const leftPx = (pct.leftPct/100) * bf.width;
+  const topPx = (pct.topPct/100) * bf.height;
+  el.style.left = (leftPx - (el.offsetWidth/2)) + 'px';
+  el.style.top = (topPx - (el.offsetHeight/2)) + 'px';
+
+  const unit = {
+    id: 'u' + (Date.now()+Math.random()).toString(36).slice(3),
+    tpl: template, hp: template.hp, dmg: template.dmg, speed: template.speed,
+    side, el, px: leftPx, py: topPx, state: 'seek', target: null, waypoint: null
+  };
+  // assign initial target (nearest enemy)
+  unit.target = findNearestEnemy(unit);
+  // if unit is ground and direct path crosses water, set waypoint to nearest bridge
+  if(unit.tpl.type !== 'flying' && pathCrossesWater(unit.px, unit.py, unit.target.cx, unit.target.cy)){
+    const bridge = nearestBridgeTo(pxToClient(unit.px), pyToClient(unit.py));
+    if(bridge) unit.waypoint = {x: (bridge.centerX - battlefield.getBoundingClientRect().left), y: (bridge.centerY - battlefield.getBoundingClientRect().top)};
+  }
+  units.push(unit);
+  // small spawn pop
+  el.animate([{transform:'scale(0.6)'},{transform:'scale(1)'}],{duration:160,easing:'ease-out'});
+}
+
+/* fire projectile animation from player's king to target percentage then spawn flying unit */
+function fireProjectileTo(pct){
+  // find player's king center
+  const king = qs('player-king').getBoundingClientRect();
+  const bf = battlefield.getBoundingClientRect();
+  const startX = king.left + king.width/2;
+  const startY = king.top + king.height/2;
+  const targetX = bf.left + (pct.leftPct/100)*bf.width;
+  const targetY = bf.top + (pct.topPct/100)*bf.height;
+
+  // projectile element (visible)
+  const proj = document.createElement('div');
+  proj.className = 'unit player flying';
+  proj.style.width='36px'; proj.style.height='36px'; proj.style.borderRadius='10px';
+  proj.innerText = '🔥';
+  proj.style.position='fixed'; proj.style.left = (startX - 18) + 'px'; proj.style.top = (startY - 18) + 'px'; proj.style.zIndex = 60;
+  document.body.appendChild(proj);
+
+  // compute travel duration based on distance (fast)
+  const dist = Math.hypot(targetX - startX, targetY - startY);
+  const duration = Math.max(200, Math.min(900, dist * 0.6));
+
+  // animate using CSS transform
+  proj.animate([{transform:'translate(0,0) scale(1)'},{transform:`translate(${targetX-startX}px, ${targetY-startY}px) scale(1.05)`}],{duration:duration, easing:'cubic-bezier(.2,.9,.2,1)'})
+  setTimeout(()=>{
+    // remove projectile element, create flying unit at target (relative to battlefield)
+    proj.remove();
+    const bfLeft = bf.left, bfTop = bf.top;
+    spawnUnitAt(cardTemplates.find(c=>c.id==='fire'), 'player', {leftPct:pct.leftPct, topPct:pct.topPct});
+  }, duration + 10);
+}
+
+/* helpers: convert px to client coords */
+function pxToClient(px){
+  const bf = battlefield.getBoundingClientRect();
+  return bf.left + px;
+}
+function pyToClient(py){
+  const bf = battlefield.getBoundingClientRect();
+  return bf.top + py;
+}
+
+/* find nearest bridge DOM rect center to given client coords */
+function nearestBridgeTo(clientX, clientY){
+  const bl = bridgeLeftEl.getBoundingClientRect(), br = bridgeRightEl.getBoundingClientRect();
+  const b1c = {centerX: bl.left + bl.width/2, centerY: bl.top + bl.height/2};
+  const b2c = {centerX: br.left + br.width/2, centerY: br.top + br.height/2};
+  const d1 = Math.hypot(clientX - b1c.centerX, clientY - b1c.centerY);
+  const d2 = Math.hypot(clientX - b2c.centerX, clientY - b2c.centerY);
+  return (d1 < d2) ? {centerX:b1c.centerX, centerY:b1c.centerY} : {centerX:b2c.centerX, centerY:b2c.centerY};
+}
+
+/* check if straight line from (sx,sy) to (tx,ty) crosses water rectangle (client coords) */
+function pathCrossesWater(sx, sy, tx, ty){
+  const water = waterEl.getBoundingClientRect();
+  // if both points are above or below water -> no cross
+  if((sy < water.top && ty < water.top) || (sy > water.bottom && ty > water.bottom)) return false;
+  // if either point is inside water -> true (will intersect) (ground cannot be in water spawn)
+  if((sy >= water.top && sy <= water.bottom) || (ty >= water.top && ty <= water.bottom)) return true;
+  // else line crosses if y range spans water region
+  const minY = Math.min(sy, ty), maxY = Math.max(sy, ty);
+  return (minY <= water.bottom && maxY >= water.top);
+}
+
+/* find nearest enemy (tower or unit) for this unit - returns {type:'tower'|'unit', id, cx, cy, ref} */
+function findNearestEnemy(unit){
+  const bf = battlefield.getBoundingClientRect();
+  let candidates = [];
+  // towers of opposite side
+  Object.keys(towers).forEach(id=>{
+    if(id.startsWith(unit.side)) return; // skip same side
+    const elId = qs(id);
+    if(!elId) return;
+    const r = elId.getBoundingClientRect();
+    candidates.push({type:'tower', id, cx: r.left + r.width/2, cy: r.top + r.height/2, ref: id});
+  });
+  // enemy units
+  units.forEach(u=>{
+    if(u.side === unit.side) return;
+    const r = u.el.getBoundingClientRect();
+    candidates.push({type:'unit', id:u.id, cx: r.left + r.width/2, cy: r.top + r.height/2, ref: u});
+  });
+  if(candidates.length === 0){
+    // fallback to nearest enemy king position
+    const otherKingId = unit.side === 'player' ? 'enemy-king' : 'player-king';
+    const r = qs(otherKingId).getBoundingClientRect();
+    return {type:'tower', id:otherKingId, cx:r.left + r.width/2, cy:r.top + r.height/2, ref: otherKingId};
+  }
+  // pick nearest by euclidean distance from unit center
+  const ur = unit.el.getBoundingClientRect();
+  const ux = ur.left + ur.width/2, uy = ur.top + ur.height/2;
+  let best = null, bestD = Infinity;
+  candidates.forEach(c=>{
+    const d = Math.hypot(c.cx - ux, c.cy - uy);
+    if(d < bestD){ bestD = d; best = c; }
+  });
+  return best;
+}
+
+/* destroy unit (remove) */
+function destroyUnit(u){
+  try{ u.el.remove(); }catch(e){}
+  units = units.filter(x=>x !== u);
+}
+
+/* tower damaged/destroyed */
+function damageTower(id, amount, bySide){
+  towers[id].hp -= amount;
+  if(towers[id].hp < 0) towers[id].hp = 0;
+  const el = qs(id + '-hp');
+  if(el) el.textContent = 'HP: ' + Math.floor(towers[id].hp);
+  // animation
+  const tEl = qs(id);
+  if(tEl) tEl.animate([{transform:'translateY(0)'},{transform:'translateY(-6px)'},{transform:'translateY(0)'}],{duration:220});
+  // check game over conditions:
+  // if king tower destroyed -> immediate end for that side
+  if(towers[id].isKing && towers[id].hp <= 0){
+    onTowerDestroyed(id, bySide);
+    return;
+  }
+  // else if all three towers of side destroyed -> end
+  const prefix = id.startsWith('player') ? 'player' : 'enemy';
+  const keys = Object.keys(towers).filter(k=>k.startsWith(prefix));
+  const allDead = keys.every(k => towers[k].hp <= 0);
+  if(allDead){
+    onTowerDestroyed(id, bySide);
+  }
+}
+
+/* onTowerDestroyed */
+function onTowerDestroyed(towerId, bySide){
+  if(gameOver) return;
+  gameOver = true;
+  log((bySide === 'player' ? 'Ty' : 'AI') + ' zniszczył ' + towerId + '! Koniec gry.');
+  setTimeout(()=>{
+    alert((bySide === 'player' ? 'Wygrałeś!' : 'Przegrałeś!') + ' (demo)');
+    location.reload();
+  },400);
+}
+
+/* --- simple AI: chooses random card and spawns on its half (top) --- */
+function startAI(){
+  setInterval(()=>{
+    if(gameOver) return;
+    window.aiElixir = Math.min(MAX_ELIXIR, window.aiElixir + 1);
+    const choice = cardTemplates[Math.floor(Math.random()*cardTemplates.length)];
+    if(window.aiElixir >= choice.cost && Math.random() < 0.55){
+      window.aiElixir -= choice.cost;
+      // choose spawn location on top half (enemy), avoid water except bridges
+      const bf = battlefield.getBoundingClientRect();
+      let xPct = Math.random() < 0.5 ? 12+Math.random()*20 : 68+Math.random()*20; // prefer near left/right
+      let yPct = 14 + Math.random()*20; // top half
+      // if ground and over water-> snap to bridge center
+      const clientX = bf.left + (xPct/100)*bf.width;
+      const clientY = bf.top + (yPct/100)*bf.height;
+      const waterRect = waterEl.getBoundingClientRect();
+      let overWater = (clientY >= waterRect.top && clientY <= waterRect.bottom);
+      if(overWater && choice.type !== 'flying'){
+        // snap to bridge positions (use bridge center)
+        const bridge = Math.random()<0.5 ? bridgeLeftEl.getBoundingClientRect() : bridgeRightEl.getBoundingClientRect();
+        const bx = (bridge.left + bridge.right)/2, by = (bridge.top + bridge.bottom)/2;
+        xPct = ((bx - bf.left) / bf.width) * 100;
+        yPct = ((by - bf.top) / bf.height) * 100;
+      }
+      // if flying, can spawn anywhere on top half
+      spawnUnitAt(choice, 'enemy', {leftPct:xPct, topPct:yPct});
+      log('AI zagrywa ' + choice.name);
+    }
+  }, 1700);
+}
+
+/* --- main game loop: move units, collisions, attacks --- */
+let last = performance.now();
+function loop(ts){
+  const dt = (ts - last) / 1000; last = ts;
+  // move units
+  units.slice().forEach(u => {
+    // recompute target if none or removed
+    if(!u.target || (u.target.type === 'unit' && !units.find(x=>x.id === u.target.id))){
+      u.target = findNearestEnemy(u);
+    }
+    // get current unit center in client coords
+    const ur = u.el.getBoundingClientRect();
+    const ux = ur.left + ur.width/2, uy = ur.top + ur.height/2;
+
+    // determine navigation target: waypoint (bridge) or final target
+    let destX = u.target.cx, destY = u.target.cy;
+    if(u.waypoint){
+      destX = battlefield.getBoundingClientRect().left + u.waypoint.x;
+      destY = battlefield.getBoundingClientRect().top + u.waypoint.y;
+    }
+
+    // move towards dest if not very close
+    const dx = destX - ux, dy = destY - uy;
+    const dist = Math.hypot(dx,dy);
+    if(dist > 6){
+      const step = Math.min(dist, u.speed * 60 * dt * 8); // tuned multiplier for speed
+      const nx = ux + (dx/dist)*step, ny = uy + (dy/dist)*step;
+      // set element position (relative to battlefield)
+      const bf = battlefield.getBoundingClientRect();
+      u.el.style.left = (nx - bf.left - (u.el.offsetWidth/2)) + 'px';
+      u.el.style.top  = (ny - bf.top - (u.el.offsetHeight/2)) + 'px';
+    } else {
+      // arrived at waypoint? clear waypoint
+      if(u.waypoint){
+        u.waypoint = null;
+        // recompute target (closest enemy now)
+        u.target = findNearestEnemy(u);
+      } else {
+        // in range to attack target?
+        // if target is tower and within ~48px -> attack
+        const maxAttackDist = 48;
+        if(u.target && Math.hypot(u.target.cx - ux, u.target.cy - uy) <= maxAttackDist){
+          // attack cooldown
+          if(!u.lastAttack || Date.now() - u.lastAttack > 600){
+            u.lastAttack = Date.now();
+            if(u.target.type === 'tower'){
+              damageTower(u.target.id, u.dmg, u.side);
+            } else if(u.target.type === 'unit'){
+              u.target.ref.hp -= u.dmg;
+              // visual feedback
+              u.target.ref.el.animate([{opacity:1},{opacity:0.6},{opacity:1}],{duration:180});
+              if(u.target.ref.hp <= 0) destroyUnit(u.target.ref);
+            }
+          }
+        } else {
+          // if target is unit and close -> melee exchange
+          if(u.target && u.target.type === 'unit' && Math.hypot(u.target.cx - ux, u.target.cy - uy) <= 44){
+            if(!u.lastAttack || Date.now() - u.lastAttack > 420){
+              u.lastAttack = Date.now();
+              u.target.ref.hp -= u.dmg;
+              u.hp -= u.target.ref.dmg;
+              u.el.animate([{opacity:1},{opacity:0.6},{opacity:1}],{duration:160});
+              u.target.ref.el.animate([{opacity:1},{opacity:0.6},{opacity:1}],{duration:160});
+              if(u.target.ref.hp <= 0) destroyUnit(u.target.ref);
+              if(u.hp <= 0) destroyUnit(u);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // cleanup dead units array (some destroyed by functions)
+  units = units.filter(u => u.hp > 0 && document.body.contains(u.el));
+  requestAnimationFrame(loop);
+}
+
+/* initialize and start */
+setup();
+updateElixirUI();
+
+/* small helper to get client px center for a tower by id */
+function towerCenterClient(id){
+  const r = qs(id).getBoundingClientRect();
+  return {cx: r.left + r.width/2, cy: r.top + r.height/2};
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Offline AI 2.0</title>
+<style>
+body { font-family: Arial; background: #1e1e1e; color: #fff; padding: 20px; }
+textarea, input { width: 100%; margin: 5px 0; padding: 8px; }
+button { padding: 8px 12px; margin: 5px; cursor: pointer; }
+#chat { border: 1px solid #555; padding: 10px; height: 300px; overflow-y: auto; background: #2b2b2b; }
+.userMsg { color: #4caf50; margin: 5px 0; }
+.aiMsg { color: #2196f3; margin: 5px 0; }
+.mode { margin-bottom: 10px; }
+.controls { margin-top: 10px; }
+.indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 5px; }
+</style>
+</head>
+<body>
+
+<h2>Offline AI 2.0 (User / Developer)</h2>
+
+<div class="mode">
+Tryb: 
+<select id="modeSelect">
+  <option value="user">User</option>
+  <option value="developer">Developer</option>
+</select>
+Model: 
+<select id="modelSelect">
+  <option value="AI-1">AI-1</option>
+  <option value="AI-2">AI-2</option>
+  <option value="AI-3">AI-3</option>
+</select>
+</div>
+
+<div id="chat"></div>
+
+<input type="text" id="questionInput" placeholder="Wpisz pytanie..." />
+<button id="sendBtn">Wyślij</button>
+
+<div class="controls">
+<button id="resetBtn">Reset</button>
+<button id="toggleLSBtn">Toggle LocalStorage <span id="lsIndicator" class="indicator"></span></button>
+</div>
+
+<script>
+// -------------------- CONFIG --------------------
+
+// --- TU WKLEJ SWOJE Q&A DLA RÓŻNYCH MODELI ---
+// Format: { question: "pytanie", answer: "odpowiedź" }
+// Każdy model ma swoją listę
+const predefinedQA = {
+    "AI-1": [
+[
+    { question: "Hej", answer: "Hej! Co tam u ciebie?" },
+    { question: "Siema", answer: "Siemka! Co tam?" },
+        { question: "Cześc", answer: "Cześc! Co tam u ciebie?" },
+            { question: "Dobrze", answer: "To super! Co nowego?" }
+]
+
+    ],
+    "AI-2": [
+    { question: "Hej", answer: "Hej! Co tam u ciebie?" },
+    { question: "Siema", answer: "Siemka! Co tam?" },
+        { question: "Cześc", answer: "Cześc! Co tam u ciebie?" },
+            { question: "Dobrze", answer: "To super! Co nowego?" },
+                { question: "Jak się nazywasz", answer: "Nazywam się AzorGPT w wersji 2.0 oraz jestem modelem AI-2" },
+    { question: "Opowiedz o sobie", answer: "Nazywam się AzorGPT 2.0 i jestem modelem AI-2.Lubię pomagac ludziom. Zostałem stworzony przez AzorTech w 2025 roku. Przyjaźnię się z ChatemGPT od OpenAI. " },
+        { question: "Pa", answer: "Pa! Do zobaczenia!" },
+            { question: "Kocham cię!", answer: "❤❤Dzięki! Ja ciebie też!" }
+    ],
+    "AI-3": [
+    { question: "Hej", answer: "Hej! Co tam u ciebie?" },
+    { question: "Siema", answer: "Siemka! Co tam?" },
+        { question: "Cześc", answer: "Cześc! Co tam u ciebie?" },
+            { question: "Dobrze", answer: "To super! Co nowego?" },
+                { question: "Jak się nazywasz", answer: "Nazywam się AzorGPT w wersji 2.0 oraz jestem modelem AI-3" },
+    { question: "Opowiedz o sobie", answer: "Nazywam się AzorGPT 2.0 i jestem modelem AI-3.Lubię pomagac ludziom. Zostałem stworzony przez AzorTech w 2025 roku. Przyjaźnię się z ChatemGPT od OpenAI. " },
+        { question: "Pa", answer: "Pa! Do zobaczenia!" },
+            { question: "Kocham cię!", answer: "❤❤Dzięki! Ja ciebie też!" },
+             { question: "Czym jest tryb Developer", answer: "tutaj w mojej aplikacji oznacza tryb w którym się uczę od ciebie. Możesz spróbowac!" },
+           { question: "Opowiedz mi krótko o AzorOS.", answer: "AzorOS czyli oprogramowanie na komputery stworzone przez AzorTech (przez firmę która mnie stworzyła). Najnowszą wersją AzorOS PC-12 a na nowy rok wyjdzie AzorOS PC-26. W systemie jest parędziesiąt tysięcy linijek kodu." },
+             { question: "Co umiesz", answer: "Umiem odpowiadac na pytania użytkowników." },
+               { question: "Co chcą do ciebie dodac", answer: "Moi twórcy w AzorTech chcą dodac do mnie nowe modele, generowanie obrazów, więcej pytań, nowe funkcje i wiele więcej." },
+                { question: "W co lubisz grac", answer: "Jako AI nie umiem grac w gry ale AzorTech chce do mnie dodac specjalne serwery gamingowe i mnie jako gracza w gry od azortech albo szachów. Więc można powiedziec że lubię grac w szachy." },
+                 { question: "Opowiedz mi żart", answer: "Kolamola" },
+                   { question: "Która jest godzina", answer: "Mój serwer pokazuje godzinę 17:13 UTC." },
+                    { question: "", answer: "" },
+               
+    ]
+};
+
+// ------------------------------------------------
+
+let db;
+let localStorageEnabled = true;
+
+// --- IndexedDB Setup ---
+const request = indexedDB.open("OfflineAI_DB", 1);
+request.onupgradeneeded = function(event) {
+    db = event.target.result;
+    db.createObjectStore("qa", { keyPath: "id", autoIncrement: true });
+};
+request.onsuccess = function(event) { db = event.target.result; };
+request.onerror = function() { alert("Błąd bazy danych!"); };
+
+// --- DOM Elements ---
+const chat = document.getElementById("chat");
+const questionInput = document.getElementById("questionInput");
+const sendBtn = document.getElementById("sendBtn");
+const modeSelect = document.getElementById("modeSelect");
+const modelSelect = document.getElementById("modelSelect");
+const resetBtn = document.getElementById("resetBtn");
+const toggleLSBtn = document.getElementById("toggleLSBtn");
+const lsIndicator = document.getElementById("lsIndicator");
+
+// --- Helper Functions ---
+function addChatMessage(message, type) {
+    const div = document.createElement("div");
+    div.textContent = message;
+    div.className = type === "user" ? "userMsg" : "aiMsg";
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function similarity(a, b) {
+    let matches = 0;
+    const wordsA = a.split(" ");
+    const wordsB = b.split(" ");
+    for (let w of wordsA) { if (wordsB.includes(w)) matches++; }
+    return matches / Math.max(wordsA.length, wordsB.length);
+}
+
+function saveQA(question, answer) {
+    if(!localStorageEnabled) return;
+    const transaction = db.transaction(["qa"], "readwrite");
+    const store = transaction.objectStore("qa");
+    store.add({ question, answer, timestamp: Date.now(), weight: 1, model: modelSelect.value });
+}
+
+function findAnswer(question, callback) {
+    const transaction = db.transaction(["qa"], "readonly");
+    const store = transaction.objectStore("qa");
+    const allData = store.getAll();
+    allData.onsuccess = function() {
+        let records = allData.result.filter(r => r.model === modelSelect.value);
+        let bestMatch = null;
+        let highestScore = 0;
+
+        // sprawdzamy predefined QA dla aktualnego modelu
+        const predef = predefinedQA[modelSelect.value] || [];
+        records = records.concat(predef);
+
+        for (let r of records) {
+            let score = similarity(question.toLowerCase(), r.question.toLowerCase());
+            if(score > highestScore) { highestScore = score; bestMatch = r; }
+        }
+
+        if(highestScore > 0.4) {
+            callback(bestMatch.answer);
+        } else {
+            callback("Niestety ale nie potrafię odpowiedziec na to pytanie. Naucz mnie w trybie developer i zapisz to potem żebym umiał.");
+        }
+    };
+}
+
+// --- Event Listeners ---
+sendBtn.addEventListener("click", () => {
+    const question = questionInput.value.trim();
+    if(!question) return;
+    addChatMessage("Ty: " + question, "user");
+
+    const mode = modeSelect.value;
+
+    if(mode === "user") {
+        findAnswer(question, (answer) => addChatMessage("AI: " + answer, "aiMsg"));
+    } else if(mode === "developer") {
+        const answer = prompt("Wpisz odpowiedź dla tego pytania:");
+        if(answer) {
+            saveQA(question, answer);
+            addChatMessage("AI zapamiętało odpowiedź!", "aiMsg");
+        }
+    }
+    questionInput.value = "";
+});
+
+resetBtn.addEventListener("click", () => {
+    if(confirm("Czy na pewno chcesz zresetować pamięć AI?")) {
+        const transaction = db.transaction(["qa"], "readwrite");
+        const store = transaction.objectStore("qa");
+        store.clear();
+        addChatMessage("Pamięć AI została zresetowana.", "aiMsg");
+    }
+});
+
+toggleLSBtn.addEventListener("click", () => {
+    localStorageEnabled = !localStorageEnabled;
+    lsIndicator.style.background = localStorageEnabled ? "green" : "red";
+});
+
+// --- Inicjalizacja wskaźnika ---
+lsIndicator.style.background = localStorageEnabled ? "green" : "red";
+</script>
+
+</body>
+</html>

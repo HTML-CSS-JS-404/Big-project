@@ -1,0 +1,7 @@
+const aiNames = [
+  "Gracz 128","Wojan","susu","SlAy gUrL","Kupeczka","JondroGrena","AzorekDog's #1 idol","ScaryTeacher","BabaOdMatmy","six seven",
+  "TwojaStara","Yellow_flame","Kozak","Tutek","Szelka","Pididi","🚗BMW-sigma","I❤🍕","KiblowySrajtuh","Drakon",
+  "Sonic","MamDużego","Plejer7482","KaśkaKoniara","MiNeCrAfT EnJoYeR","SmAsNuG Is tHe bEsT","Crow_kaka!","Kakaszka123","ukraineGAY🏳‍🌈","ŻhanetkaPierdka",
+  "LubiePlackiSzejścsiedem","Foo","Boeing747💙","PioterPoniatowski","UTF-8","bot 1","Bot 2","Bot 3","Bot 4","Bot 5",
+  "Bot 1","Turbo","Bot 1","Bot 1","Bot 1","Bot 2","Bot 2","śingśiangśiong","MamaJaPupsik","Furia!",
+  "WcAlE NiE SzUkAm aTeNcJi xD JeDeN DwA TsZy","Piorun","Zostaw wszystkie emotki po koleji jeśli szukasz dziewczyny","Blitz","TyłekPandy","IWILLEATU","jajko","PepePanDziobak","Sigma","KatGiept"

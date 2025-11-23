@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Klasz Rojal — Full Playable</title>
+<style>
+:root{
+  --bg:#071821; --arena:#0b3a4a; --glass:rgba(255,255,255,0.06);
+  --player:#6bf07a; --enemy:#ff8b8b; --water:#1b6b8a;
+  --marker-ok:rgba(110,255,150,0.35); --marker-bad:rgba(255,90,90,0.35);
+  --yellow:#ffd400;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#042233);font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#e6fbff}
+.wrap{max-width:1100px;margin:12px auto;padding:12px}
+h1{font-size:20px;margin:6px 0 12px;text-align:left}
+.stage{background:linear-gradient(180deg,var(--arena),#063642);padding:12px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.6);position:relative;overflow:hidden}
+.battlefield{height:520px;border-radius:10px;position:relative;overflow:hidden;background:
+  linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.03));padding:6px;border:2px solid rgba(255,255,255,0.02)}
+
+/* textures */
+.battlefield .groundTexture{position:absolute;left:0;top:0;right:0;bottom:0;background-image:url('https://tse4.mm.bing.net/th/id/OIP.i8NC61hnMAPECTIV4SsKLwHaE3?rs=1&pid=ImgDetMain&o=7&rm=3');background-size:cover;opacity:0.25;filter:contrast(1.05) saturate(.9);z-index:0}
+
+/* water channel across center with gif background */
+.water{position:absolute;left:0;right:0;top:42%;height:16%;background-image:url('https://tse3.mm.bing.net/th/id/OIP.4WLVexXhIJhbdx25EGY9FAHaE7?rs=1&pid=ImgDetMain&o=7&rm=3');background-size:cover;opacity:0.98;border-top:2px solid rgba(255,255,255,0.03);border-bottom:2px solid rgba(0,0,0,0.25);z-index:1;mix-blend-mode:overlay;filter:blur(.2px)}
+
+/* bridges (left/right) */
+.bridge{position:absolute;width:18%;height:100%;top:0;left:6%;transform:translateY(-1%);background:linear-gradient(180deg, rgba(40,30,30,0.3), rgba(0,0,0,0.4));box-shadow:inset 0 10px 40px rgba(0,0,0,0.25);z-index:2;border-radius:4px}
+.bridge.right{left:auto;right:6%}
+
+/* towers with texture */
+.tower{position:absolute;width:92px;height:92px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-weight:800;box-shadow:0 8px 22px rgba(0,0,0,0.6);z-index:3;overflow:hidden;border:2px solid rgba(255,255,255,0.04)}
+.tower .tex{position:absolute;inset:0;background-image:url('https://tse1.mm.bing.net/th/id/OIP.9pwzuXW2uqXDRGlprS7wYAHaE8?rs=1&pid=ImgDetMain&o=7&rm=3');background-size:cover;opacity:0.95;filter:contrast(.95) brightness(.95);z-index:0}
+.tower > *{position:relative;z-index:3}
+.tower.player{border-color:rgba(107,240,122,0.28)}
+.tower.enemy{border-color:rgba(255,107,107,0.22)}
+
+/* main king towers */
+.tower.king{width:120px;height:120px;border-radius:12px;font-size:20px}
+
+/* units */
+.unit{position:absolute;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#111;z-index:6;pointer-events:none;text-shadow:0 1px 0 rgba(255,255,255,0.2)}
+.unit.tank{width:78px;height:78px;border-radius:12px;font-size:30px}
+.unit.player{background:linear-gradient(180deg,var(--player),#3dbf4f)}
+.unit.enemy{background:linear-gradient(180deg,var(--enemy),#ff8b8b)}
+.unit.flying{border:2px dashed rgba(0,0,0,0.08);box-shadow:0 10px 30px rgba(0,0,0,0.35)}
+
+/* projectile */
+.projectile{position:fixed;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;z-index:300;pointer-events:none}
+
+/* HUD */
+.hud{display:flex;gap:12px;margin-top:12px;align-items:center}
+.elixir{flex:1;background:rgba(255,255,255,0.03);padding:8px;border-radius:12px;display:flex;align-items:center;gap:8px}
+.elixir .bar{height:12px;background:rgba(255,255,255,0.02);border-radius:8px;flex:1;overflow:hidden}
+.elixir .bar .fill{height:100%;width:0%;background:linear-gradient(90deg,#8ef5a3,#2bdc6c);transition:width .2s}
+.deck{display:flex;gap:8px}
+.card{width:86px;height:110px;border-radius:12px;background:linear-gradient(180deg,#fff,#f2f2f2);box-shadow:0 8px 26px rgba(0,0,0,0.5);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:10px;cursor:pointer;user-select:none;position:relative;z-index:10}
+.card .emoji{font-size:34px}.card .name{font-size:12px;color:#222}.card .cost{background:#111;color:#fff;padding:4px 8px;border-radius:8px;font-weight:800}
+
+/* spawn marker */
+.spawnMarker{position:absolute;width:56px;height:56px;border-radius:10px;pointer-events:none;z-index:30;display:flex;align-items:center;justify-content:center;font-weight:900}
+.spawnMarker.ok{background:linear-gradient(180deg, rgba(110,255,150,0.35), rgba(40,200,80,0.18));border:2px solid rgba(40,200,80,0.85)}
+.spawnMarker.bad{background:linear-gradient(180deg, rgba(255,90,90,0.35), rgba(200,40,40,0.12));border:2px solid rgba(200,40,40,0.9)}
+
+/* log */
+.log{margin-top:10px;color:#cfeefd;font-size:13px;min-height:28px}
+
+/* menu overlay */
+.menuOverlay{position:fixed;inset:0;background:linear-gradient(180deg, rgba(2,6,12,0.86), rgba(3,8,15,0.94));display:flex;align-items:center;justify-content:center;z-index:200}
+.menuCard{width:92%;max-width:920px;background:linear-gradient(180deg,#052b30,#03363b);padding:18px;border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,0.7);display:flex;flex-direction:column;gap:14px;align-items:center}
+.tabs{display:flex;gap:14px;align-items:center}
+.tab{background:rgba(255,255,255,0.03);padding:10px 12px;border-radius:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;min-width:76px;justify-content:center}
+.playBtn{background:var(--yellow);color:#111;padding:14px 28px;border-radius:14px;font-weight:900;font-size:20px;cursor:pointer;box-shadow:0 10px 22px rgba(0,0,0,0.4)}
+.smallPanel{width:100%;background:rgba(255,255,255,0.02);padding:12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center}
+
+/* chat & profile */
+.chatIcon{position:relative;display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px;border-radius:8px;background:rgba(255,255,255,0.03);z-index:12}
+.emojiPopup{position:absolute;bottom:44px;right:0;background:rgba(0,0,0,0.6);padding:8px;border-radius:8px;display:flex;gap:6px;z-index:210}
+.bigEmoji{position:absolute;left:50%;transform:translateX(-50%);top:calc(100% - 40px);font-size:70px;pointer-events:none;z-index:120;opacity:0;transition:all .22s}
+
+/* profile preview */
+.profileBox{display:flex;align-items:center;gap:8px}
+.profileIcon{width:42px;height:42px;border-radius:10px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:20px;color:#111}
+.profileNick{font-weight:900;color:#bffef7}
+
+/* responsive */
+@media (max-width:920px){ .battlefield{height:420px}.card{width:76px;height:96px} .collectionGrid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Klasz Rojal — Full Playable</h1>
+  <div class="stage">
+    <div class="battlefield" id="battlefield">
+      <div class="groundTexture"></div>
+      <div class="water" id="water"></div>
+      <div class="bridge left" id="bridge-left"></div>
+      <div class="bridge right" id="bridge-right"></div>
+
+      <!-- enemy towers -->
+      <div class="tower enemy" id="enemy-left" style="left:18px; top:32px" data-side="enemy">
+        <div class="tex"></div><div>🏯</div><div class="hp" id="enemy-left-hp">HP: 600</div>
+      </div>
+      <div class="tower enemy king" id="enemy-king" style="left:calc(50% - 60px); top:12px" data-side="enemy">
+        <div class="tex"></div><div>👑</div><div class="hp" id="enemy-king-hp">HP: 3000</div>
+      </div>
+      <div class="tower enemy" id="enemy-right" style="right:18px; top:32px" data-side="enemy">
+        <div class="tex"></div><div>🏯</div><div class="hp" id="enemy-right-hp">HP: 600</div>
+      </div>
+
+      <!-- player towers -->
+      <div class="tower player" id="player-left" style="left:18px; bottom:36px" data-side="player">
+        <div class="tex"></div><div>🏯</div><div class="hp" id="player-left-hp">HP: 600</div>
+      </div>
+      <div class="tower player king" id="player-king" style="left:calc(50% - 60px); bottom:12px" data-side="player">
+        <div class="tex"></div><div>👑</div><div class="hp" id="player-king-hp">HP: 3000</div>
+        <div class="bigEmoji" id="player-emoji"></div>
+      </div>
+      <div class="tower player" id="player-right" style="right:18px; bottom:36px" data-side="player">
+        <div class="tex"></div><div>🏯</div><div class="hp" id="player-right-hp">HP: 600</div>
+      </div>
+
+    </div>
+
+    <div class="hud">
+      <div class="elixir" title="Eliksir">
+        <div style="font-size:13px;font-weight:800;color:#fff">Eliksir</div>
+        <div class="bar"><div class="fill" id="elixir-fill"></div></div>
+        <div class="count" id="elixir-count">0 / 100</div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="chatArea" class="chatIcon" title="Czat / Emotki">💬 <span style="font-weight:800">Emotki</span></div>
+      </div>
+
+      <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+        <div class="profileBox">
+          <div class="profileIcon" id="profileIcon">🙂</div>
+          <div class="profileNick" id="profileNick">Gracz</div>
+        </div>
+      </div>
+
+      <div class="deck" id="deck"></div>
+    </div>
+
+    <div class="log" id="log">Witaj — ustaw nick i ikonę w menu, potem naciśnij GRAJ.</div>
+  </div>
+</div>
+
+<!-- menu overlay -->
+<div class="menuOverlay" id="menuOverlay">
+  <div class="menuCard" id="menuCard">
+    <div style="width:100%;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:20px;font-weight:900">Klasz Rojal — Menu</div>
+      <div style="font-size:13px;color:#bfeffd" id="menuVersion">Full</div>
+    </div>
+
+    <div class="tabs" id="menuTabs">
+      <div class="tab" data-tab="play">🎮<div style="font-size:12px;margin-top:6px">PLAY</div></div>
+      <div class="tab" data-tab="rewards">🎁<div style="font-size:12px;margin-top:6px">GIFTS</div></div>
+      <div class="tab" data-tab="dc">🐱<div style="font-size:12px;margin-top:6px">CHARACTERS</div></div>
+      <div class="tab" data-tab="settings">⚙️<div style="font-size:12px;margin-top:6px">SETTINGS</div></div>
+      <div class="tab" data-tab="extras">📄<div style="font-size:12px;margin-top:6px">INFORMATION</div></div>
+    </div>
+
+    <div id="tabContent" style="width:100%"></div>
+
+    <div style="width:100%;display:flex;justify-content:center;margin-top:6px">
+      <div class="playBtn" id="playBtn">GRAJ</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Full Playable Klasz Rojal
+ - click GRAJ starts game loop and AI
+ - elixir 0..100 with regen
+ - units spawn, move, attack from distance (collisions disabled)
+ - towers shoot projectiles
+ - persistent state in localStorage
+ - nick + icon selection
+ - chests: large available at start + every 5 minutes
+*/
+
+// -------------- CONSTS & DATA --------------
+const STORAGE_KEY = 'klaszRojal_full_v2';
+const LARGE_CHEST_INTERVAL_MS = 5 * 60 * 1000;
+const MAX_ELIXIR = 100;
+
+const allCardTemplates = [
+  { id:'bomb', name:'Bomb', emoji:'💣', cost:97, hp:100000,  dmg:100000,  speed:0.007, type:'bum!', tank:true, rarity:'legend' },
+  { id:'sigma', name:'Sigma', emoji:'🤫', cost:56, hp:520, dmg:72, speed:1.0, type:'ground', tank:true, rarity:'rare' },
+  { id:'fire', name:'Flame', emoji:'🔥', cost:12, hp:80,  dmg:48, speed:3.8, type:'flying', tank:false, rarity:'common' },
+  { id:'67', name:'67', emoji:'6️7️⃣', cost:67, hp:67, dmg:67, speed:6.7, type:'ground', rarity:'common' },
+
+  { id:'tutek', name:'Rex', emoji:'🦖', cost:7, hp:80, dmg:18, speed:1.2, type:'ground', rarity:'common' },
+  { id:'paly', name:'Sticks', emoji:'🥢', cost:6, hp:60, dmg:12, speed:1.6, type:'ground', rarity:'common' },
+  { id:'jajko', name:'Egg', emoji:'🍳', cost:4, hp:40, dmg:6, speed:1.1, type:'ground', rarity:'common' },
+
+  { id:'halomorda', name:'Pumpguy', emoji:'🎃', cost:14, hp:220, dmg:40, speed:1.0, type:'ground', rarity:'rare' },
+  { id:'baloniarz', name:'Baloon', emoji:'🎈', cost:13, hp:190, dmg:36, speed:2.8, type:'flying', rarity:'rare' },
+  { id:'szopikarto', name:'Shoppicarter', emoji:'🛒', cost:12, hp:210, dmg:34, speed:1.3, type:'ground', rarity:'rare' },
+
+  { id:'car', name:'VolPol', emoji:'🚗', cost:10, hp:1000, dmg:500, speed:0.3, type:'ground', special:'driveable', rarity:'epic' },
+  { id:'sun', name:'Summie', emoji:'🌞', cost:10, hp:9999, dmg:0, speed:0, type:'ground', special:'block_spawn', rarity:'epic' },
+  { id:'pancakes', name:'Panceeks', emoji:'🥞', cost:10, hp:80, dmg:1000, speed:0, type:'ground', special:'proximity_explode', rarity:'epic' }
+];
+
+const defaultState = {
+  nick: 'No Name',
+  icon: 'No Icon',
+  playerInventory: ['bomb','sigma','fire','67'],
+  playerDeck: ['bomb','sigma','fire','67'],
+  chestInventory: { smallFree:true, medium:0, large:1, gems:50 },
+  lastLargeChestTime: Date.now(),
+  lastSmallChestOpen: 0,
+  lastSave: Date.now()
+};
+
+const aiNames = [
+  "RaNdOmGuY","Omooy","Concorde","I❤Minsk","Player6934","AzorekDog's #1 fan","POLISZ MEME XD","Duży typek z ulicy","HaCkErR#rKcAh","Matematika","Wojanek","hi😄","Bot 1","Bot 2","Bot 3","...","PapikIzGud"
+];
+
+// -------------- STATE --------------
+let STATE = loadOrInitState();
+let gameStarted = false;
+let elixir = 0;
+let aiElixir = 10;
+let aiName = randomFrom(aiNames);
+let units = [];
+let spawnMode = null;
+let markerEl = null;
+let emojiCooldown = false;
+
+// timers references so we can start/stop
+let elixirTimer = null;
+let aiTimer = null;
+let largeChestTicker = null;
+let towerFireTicker = null;
+
+// dom refs
+const qs = id => document.getElementById(id);
+let battlefield, deckEl, elixirFillEl, elixirCountEl, logEl;
+
+// -------------- persistence --------------
+function saveState(){
+  try{
+    STATE.lastSave = Date.now();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+  }catch(e){ console.warn('save fail', e); }
+}
+function loadOrInitState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      // ensure fields exist
+      parsed.playerInventory = parsed.playerInventory || defaultState.playerInventory.slice();
+      parsed.playerDeck = parsed.playerDeck || defaultState.playerDeck.slice();
+      parsed.chestInventory = parsed.chestInventory || Object.assign({}, defaultState.chestInventory);
+      parsed.lastLargeChestTime = parsed.lastLargeChestTime || Date.now();
+      return parsed;
+    }
+  }catch(e){ console.warn(e); }
+  // initialize new
+  const st = JSON.parse(JSON.stringify(defaultState));
+  st.lastLargeChestTime = Date.now();
+  saveStateToLocal(st);
+  return st;
+}
+function saveStateToLocal(st){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(st)); }catch(e){}
+}
+
+// -------------- helpers --------------
+function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function findCardById(id){ return allCardTemplates.find(c=>c.id===id); }
+function log(msg){ if(logEl) logEl.textContent = msg; }
+function updateProfileUI(){ qs('profileIcon').textContent = STATE.icon; qs('profileNick').textContent = STATE.nick; }
+
+// -------------- UI Setup & Menu --------------
+function setupDOM(){
+  battlefield = qs('battlefield');
+  deckEl = qs('deck');
+  elixirFillEl = qs('elixir-fill');
+  elixirCountEl = qs('elixir-count');
+  logEl = qs('log');
+
+  updateProfileUI();
+  renderDeckUI();
+
+  // battlefield interactions
+  battlefield.addEventListener('mousemove', onBattleMouseMove);
+  battlefield.addEventListener('click', onBattleClick);
+
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === 'T' || e.key === 't'){
+      elixir = MAX_ELIXIR;
+      updateElixirUI();
+      log('Eliksir uzupełniony do maksimum (T).');
+      saveState();
+    }
+    if(e.key === 'R' || e.key === 'r') spawnRandomEnemyWave();
+  });
+
+  setupChatEmojis();
+  setupMenu();
+  startLargeChestTicker();
+  updateTowerUI();
+}
+
+// deck UI
+function renderDeckUI(){
+  deckEl.innerHTML = '';
+  STATE.playerDeck.forEach(id=>{
+    const tpl = findCardById(id) || {emoji:'❓', name:id, cost:0};
+    const card = document.createElement('div'); card.className='card'; card.dataset.id=tpl.id;
+    card.innerHTML = `<div class="emoji">${tpl.emoji}</div><div class="name">${tpl.name}</div><div class="cost">${tpl.cost}</div>`;
+    card.addEventListener('click', ()=>enterSpawnMode(tpl, card));
+    deckEl.appendChild(card);
+  });
+}
+
+// -------------- spawn UI --------------
+function enterSpawnMode(template, cardEl){
+  if(!gameStarted){ log('Kliknij GRAJ, aby rozpocząć.'); return; }
+  if(!template) return;
+  spawnMode = { template };
+  if(markerEl) markerEl.remove();
+  markerEl = document.createElement('div'); markerEl.className='spawnMarker';
+  markerEl.style.width='56px'; markerEl.style.height='56px'; markerEl.innerText = template.emoji;
+  battlefield.appendChild(markerEl);
+  log(`Tryb spawn: ${template.name}. Kliknij mapę, aby potwierdzić.`);
+}
+
+function onBattleMouseMove(ev){
+  if(!spawnMode || !markerEl) return;
+  const bf = battlefield.getBoundingClientRect();
+  let x = ev.clientX - bf.left, y = ev.clientY - bf.top;
+  x = Math.max(8, Math.min(bf.width-8, x));
+  y = Math.max(8, Math.min(bf.height-8, y));
+  markerEl.style.left = (x - 28) + 'px';
+  markerEl.style.top = (y - 28) + 'px';
+
+  const isTopHalf = (y < bf.height/2);
+  const waterRect = qs('water').getBoundingClientRect();
+  const mcx = ev.clientX, mcy = ev.clientY;
+  let overWater = false;
+  if(mcy >= waterRect.top && mcy <= waterRect.bottom){
+    const bl = qs('bridge-left').getBoundingClientRect(), br = qs('bridge-right').getBoundingClientRect();
+    if(!(mcx >= bl.left && mcx <= bl.right) && !(mcx >= br.left && mcx <= br.right)){
+      overWater = true;
+    }
+  }
+  let ok = true;
+  if(isTopHalf) ok = false;
+  if(overWater && spawnMode.template.type !== 'flying') ok = false;
+  markerEl.className = 'spawnMarker ' + (ok ? 'ok':'bad');
+}
+
+function onBattleClick(ev){
+  if(!spawnMode || !markerEl) return;
+  const bf = battlefield.getBoundingClientRect();
+  const x = ev.clientX - bf.left, y = ev.clientY - bf.top;
+  const isTopHalf = (y < bf.height/2);
+  const waterRect = qs('water').getBoundingClientRect();
+  const mcx = ev.clientX, mcy = ev.clientY;
+  let overWater = false;
+  if(mcy >= waterRect.top && mcy <= waterRect.bottom){
+    const bl = qs('bridge-left').getBoundingClientRect(), br = qs('bridge-right').getBoundingClientRect();
+    if(!(mcx >= bl.left && mcx <= bl.right) && !(mcx >= br.left && mcx <= br.right)){
+      overWater = true;
+    }
+  }
+  let ok = true;
+  if(isTopHalf) ok = false;
+  if(overWater && spawnMode.template.type !== 'flying') ok = false;
+  if(!ok){ log('Nie można spawnąć tutaj — zła strefa (woda/połowa przeciwnika).'); markerEl.className='spawnMarker bad'; return; }
+
+  if(elixir < spawnMode.template.cost){ log('Za mało eliksiru!'); return; }
+  elixir -= spawnMode.template.cost; updateElixirUI();
+
+  const bfW = bf.width, bfH = bf.height;
+  const leftPct = (x / bfW) * 100, topPct = (y / bfH) * 100;
+  if(spawnMode.template.id === 'fire'){ fireProjectileTo({leftPct, topPct}); spawnMode=null; markerEl.remove(); markerEl=null; saveState(); return; }
+  spawnUnitAt(spawnMode.template, 'player', {leftPct, topPct});
+  spawnMode = null; markerEl.remove(); markerEl = null;
+  saveState();
+  log('Zagrywasz jednostkę.');
+}
+
+// -------------- unit spawn / movement / attack (no collisions) --------------
+function spawnUnitAt(template, side, pct){
+  const el = document.createElement('div');
+  el.className = 'unit ' + (side==='player'?'player':'enemy') + (template.type==='flying' ? ' flying':'') + (template.tank ? ' tank':'');
+  el.innerText = template.emoji;
+  battlefield.appendChild(el);
+
+  const bf = battlefield.getBoundingClientRect();
+  const leftPx = (pct.leftPct/100) * bf.width;
+  const topPx = (pct.topPct/100) * bf.height;
+  el.style.left = (leftPx - 28) + 'px';
+  el.style.top = (topPx - 28) + 'px';
+
+  const unit = {
+    id: 'u' + (Date.now()+Math.random()).toString(36).slice(3),
+    tpl: Object.assign({}, template),
+    hp: template.hp || 100,
+    dmg: template.dmg || 10,
+    speed: template.speed || 1.0,
+    side, el, px:leftPx, py:topPx, target:null, waypoint:null, lastAttack:0
+  };
+
+  unit.target = findNearestEnemy(unit);
+
+  // waypoint to bridge if would cross water
+  if(unit.tpl.type !== 'flying'){
+    const bfC = battlefield.getBoundingClientRect();
+    const tCenter = unit.target ? {x: unit.target.cx, y: unit.target.cy} : null;
+    if(tCenter && pathCrossesWaterClient(bfC.left + unit.px, bfC.top + unit.py, tCenter.x, tCenter.y)){
+      const bridge = nearestBridgeToClient(bfC.left + unit.px, bfC.top + unit.py);
+      if(bridge) unit.waypoint = {x: bridge.centerX - bfC.left, y: bridge.centerY - bfC.top};
+    }
+  }
+
+  units.push(unit);
+  el.animate([{transform:'scale(.6)'},{transform:'scale(1)'}],{duration:160,easing:'ease-out'});
+}
+
+// fire projectile spawn
+function fireProjectileTo(pct){
+  const king = qs('player-king').getBoundingClientRect();
+  const bf = battlefield.getBoundingClientRect();
+  const startX = king.left + king.width/2;
+  const startY = king.top + king.height/2;
+  const targetX = bf.left + (pct.leftPct/100)*bf.width;
+  const targetY = bf.top + (pct.topPct/100)*bf.height;
+  const proj = document.createElement('div');
+  proj.className = 'projectile';
+  proj.style.width='28px'; proj.style.height='28px'; proj.style.borderRadius='8px'; proj.style.background='#ff8b3d'; proj.style.left=(startX-14)+'px'; proj.style.top=(startY-14)+'px';
+  proj.textContent='🔥'; document.body.appendChild(proj);
+  const dist = Math.hypot(targetX-startX, targetY-startY);
+  const duration = Math.max(220, Math.min(900, dist*0.6));
+  const start = performance.now();
+  const tick = () => {
+    const now = performance.now(); const t = Math.min(1,(now-start)/duration);
+    const nx = startX + (targetX-startX)*t, ny = startY + (targetY-startY)*t;
+    proj.style.left = (nx-14) + 'px'; proj.style.top = (ny-14) + 'px';
+    if(t < 1) requestAnimationFrame(tick);
+    else {
+      proj.remove();
+      spawnUnitAt(findCardById('fire'), 'player', {leftPct:pct.leftPct, topPct:pct.topPct});
+    }
+  };
+  requestAnimationFrame(tick);
+}
+
+// -------------- helpers for coordinates --------------
+function nearestBridgeToClient(clientX, clientY){
+  const bl = qs('bridge-left').getBoundingClientRect(), br = qs('bridge-right').getBoundingClientRect();
+  const b1c = {centerX: bl.left + bl.width/2, centerY: bl.top + bl.height/2};
+  const b2c = {centerX: br.left + br.width/2, centerY: br.top + br.height/2};
+  const d1 = Math.hypot(clientX - b1c.centerX, clientY - b1c.centerY);
+  const d2 = Math.hypot(clientX - b2c.centerX, clientY - b2c.centerY);
+  return (d1 < d2) ? {centerX:b1c.centerX, centerY:b1c.centerY} : {centerX:b2c.centerX, centerY:b2c.centerY};
+}
+function pathCrossesWaterClient(sx, sy, tx, ty){
+  const water = qs('water').getBoundingClientRect();
+  if((sy < water.top && ty < water.top) || (sy > water.bottom && ty > water.bottom)) return false;
+  if((sy >= water.top && sy <= water.bottom) || (ty >= water.top && ty <= water.bottom)) return true;
+  const minY = Math.min(sy, ty), maxY = Math.max(sy, ty);
+  return (minY <= water.bottom && maxY >= water.top);
+}
+
+// find nearest enemy target
+function findNearestEnemy(unit){
+  let candidates = [];
+  const prefix = unit.side === 'player' ? 'enemy' : 'player';
+  ['left','king','right'].forEach(suf=>{
+    const id = prefix + '-' + suf;
+    const el = qs(id);
+    if(!el) return;
+    const r = el.getBoundingClientRect();
+    candidates.push({type:'tower', id, cx: r.left + r.width/2, cy: r.top + r.height/2, ref:id});
+  });
+  units.forEach(u=>{
+    if(u.side === unit.side) return;
+    const r = u.el.getBoundingClientRect();
+    candidates.push({type:'unit', id:u.id, cx: r.left + r.width/2, cy: r.top + r.height/2, ref:u});
+  });
+  if(candidates.length === 0){
+    const otherKingId = unit.side === 'player' ? 'enemy-king' : 'player-king';
+    const r = qs(otherKingId).getBoundingClientRect();
+    return {type:'tower', id:otherKingId, cx:r.left + r.width/2, cy:r.top + r.height/2, ref:otherKingId};
+  }
+  const ur = unit.el.getBoundingClientRect(), ux = ur.left + ur.width/2, uy = ur.top + ur.height/2;
+  let best=null, bestD=Infinity;
+  candidates.forEach(c=>{
+    const d = Math.hypot(c.cx - ux, c.cy - uy);
+    if(d < bestD){ bestD = d; best = c; }
+  });
+  return best;
+}
+
+// -------------- towers & shooting --------------
+const towers = {
+  'enemy-left': {hp:600},
+  'enemy-king': {hp:3000, isKing:true},
+  'enemy-right': {hp:600},
+  'player-left': {hp:600},
+  'player-king': {hp:3000, isKing:true},
+  'player-right': {hp:600}
+};
+
+function updateTowerUI(){
+  Object.keys(towers).forEach(id=>{
+    const el = qs(id + '-hp');
+    if(el) el.textContent = 'HP: ' + Math.floor(towers[id].hp);
+  });
+}
+
+function damageTower(id, amount, bySide){
+  towers[id].hp -= amount; if(towers[id].hp < 0) towers[id].hp = 0;
+  const el = qs(id + '-hp'); if(el) el.textContent = 'HP: ' + Math.floor(towers[id].hp);
+  const tEl = qs(id);
+  if(tEl) tEl.animate([{transform:'translateY(0)'},{transform:'translateY(-6px)'},{transform:'translateY(0)'}],{duration:220});
+  if(towers[id].isKing && towers[id].hp <= 0){ onTowerDestroyed(id, bySide); return; }
+  const prefix = id.startsWith('player') ? 'player' : 'enemy';
+  const keys = Object.keys(towers).filter(k=>k.startsWith(prefix));
+  const allDead = keys.every(k => towers[k].hp <= 0);
+  if(allDead) onTowerDestroyed(id, bySide);
+}
+
+function onTowerDestroyed(towerId, bySide){
+  gameStarted = false;
+  log((bySide === 'player' ? 'Ty' : aiName) + ' zniszczył ' + towerId + '! Koniec gry.');
+  setTimeout(()=>{
+    alert((bySide === 'player' ? 'Wygrałeś!' : 'Przegrałeś!'));
+    if(bySide === 'player'){
+      STATE.chestInventory.medium = (STATE.chestInventory.medium || 0) + 1;
+      log('Otrzymujesz 1 średnią skrzynię za zwycięstwo.');
+      saveState();
+    }
+    qs('menuOverlay').style.display = 'flex';
+  },400);
+}
+
+function startTowerFire(){
+  if(towerFireTicker) clearInterval(towerFireTicker);
+  towerFireTicker = setInterval(()=>{
+    if(!gameStarted) return;
+    // each tower tries to find nearest enemy unit and fire projectile
+    ['enemy-left','enemy-right','enemy-king','player-left','player-right','player-king'].forEach(tid=>{
+      const t = qs(tid);
+      if(!t) return;
+      // find nearest enemy entity to tower
+      const tRect = t.getBoundingClientRect();
+      const tx = tRect.left + tRect.width/2, ty = tRect.top + tRect.height/2;
+      // build candidate list depending on side
+      const thisSide = tid.startsWith('player') ? 'player' : 'enemy';
+      let candidates = [];
+      // units opposite side
+      units.forEach(u => { if(u.side !== thisSide) { const r = u.el.getBoundingClientRect(); candidates.push({type:'unit', ref:u, cx:r.left+r.width/2, cy:r.top+r.height/2}); }});
+      // towers opposite side
+      const otherPrefix = thisSide === 'player' ? 'enemy' : 'player';
+      ['left','king','right'].forEach(suf=>{
+        const oid = otherPrefix + '-' + suf; const oe = qs(oid);
+        if(!oe) return;
+        const r = oe.getBoundingClientRect();
+        candidates.push({type:'tower', ref:oid, cx:r.left + r.width/2, cy:r.top + r.height/2});
+      });
+      if(candidates.length === 0) return;
+      // pick nearest
+      let best = null, bestD = Infinity;
+      candidates.forEach(c => {
+        const d = Math.hypot(c.cx - tx, c.cy - ty);
+        if(d < bestD){ bestD = d; best = c; }
+      });
+      if(!best) return;
+      // fire projectile
+      const dmg = 40; // tower damage
+      fireTowerProjectile({x:tx,y:ty}, {x:best.cx,y:best.cy}, best, dmg, thisSide);
+    });
+  }, 900);
+}
+
+function fireTowerProjectile(from, to, targetCandidate, dmg, towerSide){
+  const proj = document.createElement('div');
+  proj.className = 'projectile';
+  proj.style.background = towerSide === 'player' ? '#7ef58a' : '#ff9b9b';
+  proj.style.left = (from.x - 10) + 'px'; proj.style.top = (from.y - 10) + 'px'; proj.style.width='20px'; proj.style.height='20px';
+  proj.textContent = '•';
+  document.body.appendChild(proj);
+  const dist = Math.hypot(to.x - from.x, to.y - from.y);
+  const duration = Math.max(200, Math.min(900, dist * 0.5));
+  const start = performance.now();
+  const tick = ()=>{
+    const now = performance.now(); const t = Math.min(1,(now-start)/duration);
+    const nx = from.x + (to.x - from.x) * t, ny = from.y + (to.y - from.y) * t;
+    proj.style.left = (nx - 10) + 'px'; proj.style.top = (ny - 10) + 'px';
+    if(t < 1) requestAnimationFrame(tick);
+    else {
+      // hit: apply damage to unit or tower
+      if(targetCandidate.type === 'tower'){
+        damageTower(targetCandidate.ref, dmg, towerSide);
+      } else if(targetCandidate.type === 'unit'){
+        targetCandidate.ref.hp -= dmg;
+        targetCandidate.ref.el.animate([{opacity:1},{opacity:0.5},{opacity:1}],{duration:180});
+        if(targetCandidate.ref.hp <= 0) destroyUnit(targetCandidate.ref);
+      }
+      proj.remove();
+    }
+  };
+  requestAnimationFrame(tick);
+}
+
+// -------------- AI spawning --------------
+let aiSpawnInterval = null;
+function startAISpawning(){
+  if(aiSpawnInterval) clearInterval(aiSpawnInterval);
+  aiSpawnInterval = setInterval(()=>{
+    if(!gameStarted) return;
+    aiElixir = Math.min(MAX_ELIXIR, aiElixir + 1);
+    const choice = randomFrom(allCardTemplates);
+    if(aiElixir >= choice.cost && Math.random() < 0.46){
+      aiElixir -= choice.cost;
+      const bf = battlefield.getBoundingClientRect();
+      let xPct = Math.random() < 0.5 ? 12 + Math.random()*18 : 68 + Math.random()*18;
+      let yPct = 8 + Math.random()*18;
+      const clientX = bf.left + (xPct/100)*bf.width;
+      const clientY = bf.top + (yPct/100)*bf.height;
+      const waterRect = qs('water').getBoundingClientRect();
+      let overWater = (clientY >= waterRect.top && clientY <= waterRect.bottom);
+      if(overWater && choice.type !== 'flying'){
+        const bridge = Math.random() < 0.5 ? qs('bridge-left').getBoundingClientRect() : qs('bridge-right').getBoundingClientRect();
+        const bx = (bridge.left + bridge.right)/2, by = (bridge.top + bridge.bottom)/2;
+        xPct = ((bx - bf.left) / bf.width) * 100;
+        yPct = ((by - bf.top) / bf.height) * 100;
+      }
+      spawnUnitAt(choice, 'enemy', {leftPct:xPct, topPct:yPct});
+      log(aiName + ' zagrał ' + choice.name);
+    }
+  }, 1400);
+}
+
+// -------------- main loop --------------
+let last = performance.now();
+function mainLoop(ts){
+  const dt = (ts - last) / 1000; last = ts;
+
+  if(gameStarted){
+    // move & attack
+    units.slice().forEach(u=>{
+      if(!u.target || (u.target.type === 'unit' && !units.find(x=>x.id === u.target.id))){
+        u.target = findNearestEnemy(u);
+      }
+      const ur = u.el.getBoundingClientRect();
+      const ux = ur.left + ur.width/2, uy = ur.top + ur.height/2;
+      let destX = u.target ? u.target.cx : ux, destY = u.target ? u.target.cy : uy;
+      if(u.waypoint){
+        const bf = battlefield.getBoundingClientRect();
+        destX = bf.left + u.waypoint.x;
+        destY = bf.top + u.waypoint.y;
+      }
+      const dx = destX - ux, dy = destY - uy;
+      const dist = Math.hypot(dx,dy);
+      if(dist > 6){
+        const step = Math.min(dist, Math.max(1, u.speed * 60 * dt * 8));
+        const nx = ux + (dx/dist)*step, ny = uy + (dy/dist)*step;
+        const bf = battlefield.getBoundingClientRect();
+        u.el.style.left = (nx - bf.left - (u.el.offsetWidth/2)) + 'px';
+        u.el.style.top  = (ny - bf.top - (u.el.offsetHeight/2)) + 'px';
+      } else {
+        if(u.waypoint){ u.waypoint = null; u.target = findNearestEnemy(u); }
+        else {
+          const attackRange = 120;
+          if(u.target && Math.hypot(u.target.cx - ux, u.target.cy - uy) <= attackRange){
+            if(!u.lastAttack || Date.now() - u.lastAttack > 600){
+              u.lastAttack = Date.now();
+              if(u.target.type === 'tower'){
+                damageTower(u.target.id, u.dmg, u.side);
+              } else if(u.target.type === 'unit'){
+                u.target.ref.hp -= u.dmg;
+                u.target.ref.el.animate([{opacity:1},{opacity:0.6},{opacity:1}],{duration:180});
+                if(u.target.ref.hp <= 0) destroyUnit(u.target.ref);
+              }
+            }
+          } else {
+            if(u.target && u.target.type === 'unit' && Math.hypot(u.target.cx - ux, u.target.cy - uy) <= 44){
+              if(!u.lastAttack || Date.now() - u.lastAttack > 420){
+                u.lastAttack = Date.now();
+                u.target.ref.hp -= u.dmg;
+                u.hp -= u.target.ref.dmg;
+                u.el.animate([{opacity:1},{opacity:0.6},{opacity:1}],{duration:160});
+                u.target.ref.el.animate([{opacity:1},{opacity:0.6},{opacity:1}],{duration:160});
+                if(u.target.ref.hp <= 0) destroyUnit(u.target.ref);
+                if(u.hp <= 0) destroyUnit(u);
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // special proximity explode
+    units.slice().forEach(u=>{
+      if(u.tpl.special === 'proximity_explode'){
+        const ur = u.el.getBoundingClientRect(); const ux = ur.left + ur.width/2, uy = ur.top + ur.height/2;
+        let exploded = false;
+        units.forEach(o=>{ if(o !== u){ const or = o.el.getBoundingClientRect(); const ox = or.left + or.width/2, oy = or.top + or.height/2; if(Math.hypot(ox-ux,oy-uy) < 60) exploded = true; }});
+        ['enemy-left','enemy-right','enemy-king','player-left','player-right','player-king'].forEach(tid=>{
+          const tr = qs(tid).getBoundingClientRect(); const tx = tr.left + tr.width/2, ty = tr.top + tr.height/2;
+          if(Math.hypot(tx-ux,ty-uy) < 60) exploded = true;
+        });
+        if(exploded){
+          const anim = document.createElement('div'); anim.style.position='absolute'; anim.style.left = u.el.style.left; anim.style.top = u.el.style.top; anim.style.zIndex=130; anim.style.fontWeight='900'; anim.style.color='#fff'; anim.textContent='LUBIĘ PLACKI!';
+          battlefield.appendChild(anim); setTimeout(()=>anim.remove(),500);
+          units.slice().forEach(o=>{ const or = o.el.getBoundingClientRect(); const ox = or.left + or.width/2, oy = or.top + or.height/2; if(Math.hypot(ox-ux,oy-uy) < 90) destroyUnit(o); });
+          ['enemy-left','enemy-right','enemy-king','player-left','player-right','player-king'].forEach(tid=>{
+            const tr = qs(tid).getBoundingClientRect(); const tx = tr.left + tr.width/2, ty = tr.top + tr.height/2;
+            if(Math.hypot(tx-ux,ty-uy) < 90) damageTower(tid, 800, u.side);
+          });
+          destroyUnit(u);
+        }
+      }
+    });
+
+    units = units.filter(u => u.hp > 0 && document.body.contains(u.el));
+    updateTowerUI();
+  }
+
+  requestAnimationFrame(mainLoop);
+}
+
+// -------------- destroy --------------
+function destroyUnit(u){
+  try{ u.el.remove(); }catch(e){}
+  units = units.filter(x=>x !== u);
+}
+
+// -------------- elixir regen management --------------
+function startElixirLoop(){
+  if(elixirTimer) clearInterval(elixirTimer);
+  elixirTimer = setInterval(()=>{
+    if(!gameStarted) return;
+    if(elixir < MAX_ELIXIR){ elixir = Math.min(MAX_ELIXIR, elixir + 1); updateElixirUI(); }
+  },800);
+}
+function updateElixirUI(){
+  const pct = (elixir / MAX_ELIXIR) * 100;
+  elixirFillEl.style.width = pct + '%';
+  elixirCountEl.textContent = elixir + ' / ' + MAX_ELIXIR;
+}
+
+// -------------- AI name assign & spawn helpers --------------
+function assignNewAIName(){ aiName = randomFrom(aiNames); log('Przeciwnik: ' + aiName); }
+function spawnRandomEnemyWave(){
+  if(!gameStarted) return;
+  for(let i=0;i<4;i++){
+    const tpl = randomFrom(allCardTemplates);
+    spawnUnitAt(tpl,'enemy',{leftPct:10 + Math.random()*80, topPct: 8 + Math.random()*18});
+  }
+}
+
+// -------------- Chat / emotki --------------
+function setupChatEmojis(){
+  const chat = qs('chatArea');
+  const popup = document.createElement('div'); popup.className='emojiPopup'; popup.style.display='none';
+  ['😀','😁','😭','😡'].forEach(sym=>{
+    const b = document.createElement('button'); b.textContent = sym; b.style.fontSize='20px'; b.style.cursor='pointer';
+    b.addEventListener('click', ()=>useEmoji(sym));
+    popup.appendChild(b);
+  });
+  chat.appendChild(popup);
+  chat.addEventListener('click', (e)=>{ e.stopPropagation(); popup.style.display = popup.style.display === 'flex' ? 'none' : 'flex'; });
+  document.addEventListener('click', ()=>{ popup.style.display='none'; });
+}
+
+function useEmoji(sym){
+  if(emojiCooldown){ log('limit emotek 1 na 3s'); return; }
+  emojiCooldown = true; setTimeout(()=>emojiCooldown=false,3000);
+  const bigEl = qs('player-emoji');
+  bigEl.style.opacity = 1; bigEl.style.transform = 'translateY(-10px) scale(1)'; bigEl.textContent = sym;
+  setTimeout(()=>{ bigEl.style.opacity = 0; bigEl.style.transform = 'translateY(0px) scale(.8)'; }, 1500);
+  log('Wystawiasz emotkę: ' + sym);
+}
+
+// -------------- Menu & Tabs --------------
+function setupMenu(){
+  const tabs = Array.from(document.querySelectorAll('.tab'));
+  tabs.forEach(t => t.addEventListener('click', ()=>openTab(t.dataset.tab)));
+  openTab('play');
+
+  qs('playBtn').addEventListener('click', ()=>{
+    qs('menuOverlay').style.display = 'none';
+    startGame();
+  });
+  buildTabsContent();
+}
+
+function openTab(name){
+  Array.from(document.querySelectorAll('.tab')).forEach(t=>t.style.background='rgba(255,255,255,0.03)');
+  document.querySelector(`.tab[data-tab="${name}"]`).style.background='rgba(255,255,255,0.06)';
+  const content = qs('tabContent');
+  if(name === 'play'){
+    content.innerHTML = `
+      <div style="display:flex;gap:12px;width:100%;align-items:center">
+        <div style="flex:1">
+          <div class="smallPanel">Witaj! Ustaw nick i ikonę profilu (emotka), potem kliknij GRAJ.</div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <input id="nickInput" placeholder="Twój nick" style="padding:8px;border-radius:8px;border:none;width:40%;font-weight:900"/>
+            <input id="iconInput" placeholder="Emotka (np. 🙂)" style="padding:8px;border-radius:8px;border:none;width:20%"/>
+            <button id="saveProfileBtn" style="padding:8px 12px;border-radius:8px;background:#ffd400;color:#111;font-weight:900">ZAPISZ</button>
+          </div>
+        </div>
+        <div style="width:260px">
+          <div style="font-weight:900;margin-bottom:6px">Twoje konto</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="width:46px;height:46px;border-radius:10px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;font-weight:900" id="menuProfileIcon">${STATE.icon}</div>
+            <div style="font-weight:900" id="menuProfileNick">${STATE.nick}</div>
+          </div>
+        </div>
+      </div>`;
+    setTimeout(()=>{ qs('nickInput').value = STATE.nick || ''; qs('iconInput').value = STATE.icon || ''; qs('saveProfileBtn').addEventListener('click', saveProfileFromMenu); },20);
+  } else if(name === 'rewards'){
+    renderRewardsTab();
+  } else if(name === 'dc'){
+    renderDCTab();
+  } else if(name === 'settings'){
+    content.innerHTML = `<div class="smallPanel">Ustawienia gry: <br>- Tekstury: włączone.<br>- Auto-zapis: włączony.</div>`;
+  } else if(name === 'extras'){
+    content.innerHTML = `<div class="smallPanel">Dodatki: naciśnij R aby przetestować fale przeciwników (debug).</div>`;
+  }
+}
+
+function saveProfileFromMenu(){
+  const nick = qs('nickInput').value.trim() || 'Player';
+  const icon = qs('iconInput').value.trim() || '🙂';
+  STATE.nick = nick; STATE.icon = icon; saveState();
+  updateProfileUI();
+  qs('menuProfileIcon').textContent = icon; qs('menuProfileNick').textContent = nick;
+  log('Zapisano profil: ' + nick + ' ' + icon);
+}
+
+// -------------- Rewards & Chests --------------
+function renderRewardsTab(){
+  const content = qs('tabContent'); content.innerHTML = '';
+  const panel = document.createElement('div');
+  panel.innerHTML = `<div style="margin-bottom:8px;font-weight:900">Skrzynie</div>`;
+  const row = document.createElement('div'); row.className='chestRow';
+  const small = document.createElement('div'); small.className='chest'; small.innerHTML = `<div class="title">Mała Skrzynia</div><div>Za darmo</div><div style="margin-top:8px"><button id="openSmall">OTWÓRZ</button></div>`;
+  const med = document.createElement('div'); med.className='chest'; med.innerHTML = `<div class="title">Średnia</div><div>Ilość: <span id="medCount">${STATE.chestInventory.medium || 0}</span></div><div style="margin-top:8px"><button id="openMed">OTWÓRZ</button></div>`;
+  const large = document.createElement('div'); large.className='chest'; large.innerHTML = `<div class="title">Duża</div><div>Ilość: <span id="largeCount">${STATE.chestInventory.large || 0}</span></div><div style="margin-top:8px"><button id="openLarge">OTWÓRZ</button></div><div style="font-size:12px;margin-top:6px">Nowa duża skrzynia co 5 minut</div>`;
+  row.appendChild(small); row.appendChild(med); row.appendChild(large);
+  panel.appendChild(row);
+  content.appendChild(panel);
+  setTimeout(()=>{
+    qs('openSmall').addEventListener('click', openSmallChest);
+    qs('openMed').addEventListener('click', openMediumChest);
+    qs('openLarge').addEventListener('click', openLargeChest);
+  },20);
+}
+
+function openSmallChest(){
+  if(!STATE.chestInventory.smallFree){ log('Mała skrzynia już niedostępna.'); return; }
+  const pool = ['tutek','paly','jajko'];
+  const gotId = randomFrom(pool);
+  STATE.playerInventory.push(gotId);
+  STATE.chestInventory.smallFree = false;
+  saveState();
+  log('Otwierasz Małą Skrzynię — otrzymujesz: ' + findCardById(gotId).name);
+  renderDCTab();
+}
+function openMediumChest(){
+  if(!STATE.chestInventory.medium || STATE.chestInventory.medium <= 0){ log('Brak średnich skrzyń.'); return; }
+  STATE.chestInventory.medium -= 1;
+  const pool = ['halomorda','baloniarz','szopikarto'];
+  const gotId = randomFrom(pool);
+  STATE.playerInventory.push(gotId);
+  saveState();
+  log('Otwierasz Średnią Skrzynię — otrzymujesz: ' + findCardById(gotId).name);
+  renderDCTab();
+}
+function openLargeChest(){
+  if(!STATE.chestInventory.large || STATE.chestInventory.large <= 0){ log('Brak dużych skrzyń.'); return; }
+  STATE.chestInventory.large -= 1;
+  const pool = ['car','sun','pancakes'];
+  const gotId = randomFrom(pool);
+  STATE.playerInventory.push(gotId);
+  saveState();
+  log('Otwierasz Dużą Skrzynię — otrzymujesz: ' + findCardById(gotId).name);
+  renderDCTab();
+}
+
+// -------------- automatic large chest ticker --------------
+function startLargeChestTicker(){
+  if(!STATE.lastLargeChestTime) STATE.lastLargeChestTime = Date.now();
+  function checkAndAward(){
+    const now = Date.now();
+    const diff = now - STATE.lastLargeChestTime;
+    if(diff >= LARGE_CHEST_INTERVAL_MS){
+      const count = Math.floor(diff / LARGE_CHEST_INTERVAL_MS);
+      STATE.chestInventory.large = (STATE.chestInventory.large || 0) + count;
+      STATE.lastLargeChestTime = STATE.lastLargeChestTime + count * LARGE_CHEST_INTERVAL_MS;
+      saveState();
+      log('Nowa Duża Skrzynia dostępna (+'+count+').');
+      const lc = qs('largeCount'); if(lc) lc.textContent = STATE.chestInventory.large;
+    }
+  }
+  checkAndAward();
+  if(largeChestTicker) clearInterval(largeChestTicker);
+  largeChestTicker = setInterval(checkAndAward, 5000);
+}
+
+// -------------- Deck & Collection --------------
+function renderDCTab(){
+  const content = qs('tabContent'); content.innerHTML = '';
+  const top = document.createElement('div'); top.className='smallPanel'; top.innerHTML = '<div style="font-weight:900">Obecny Deck (max 4)</div>';
+  const deckSlots = document.createElement('div'); deckSlots.style.display='flex'; deckSlots.style.gap='8px'; deckSlots.style.marginTop='8px';
+  for(let i=0;i<4;i++){
+    const id = STATE.playerDeck[i] || null;
+    const slot = document.createElement('div'); slot.style.minWidth='140px';
+    if(id){
+      const tpl = findCardById(id);
+      slot.innerHTML = `<div class="card"><div class="emoji">${tpl.emoji}</div><div class="name">${tpl.name}</div><div class="cost">${tpl.cost}</div></div><div style="text-align:center;margin-top:6px"><button data-remove="${i}">USUŃ</button></div>`;
+      slot.querySelector('button').addEventListener('click', ()=>{ STATE.playerDeck.splice(i,1); renderDCTab(); renderDeckUI(); saveState(); });
+    } else {
+      slot.innerHTML = `<div style="min-height:110px;background:rgba(255,255,255,0.02);border-radius:10px;display:flex;align-items:center;justify-content:center">Miejsce puste</div>`;
+    }
+    deckSlots.appendChild(slot);
+  }
+  top.appendChild(deckSlots); content.appendChild(top);
+
+  const wrap = document.createElement('div'); wrap.style.marginTop='12px';
+  wrap.innerHTML = '<div style="font-weight:900;margin-bottom:8px">Kolekcja kart</div>';
+  const grid = document.createElement('div'); grid.className='collectionGrid';
+  allCardTemplates.forEach(tpl=>{
+    const c = document.createElement('div'); c.style.padding='10px'; c.style.background='rgba(255,255,255,0.03)'; c.style.borderRadius='10px';
+    const owned = STATE.playerInventory.includes(tpl.id);
+    c.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:28px">${tpl.emoji}</div><div style="font-weight:900">${tpl.name}</div></div><div style="margin-top:8px">Koszt: ${tpl.cost} • ${tpl.rarity || 'common'}</div>`;
+    if(!owned){
+      c.classList.add('cardGrey');
+      const no = document.createElement('div'); no.className='nopossess'; no.textContent='Nie posiadasz tej karty';
+      c.appendChild(no);
+    } else {
+      const btn = document.createElement('button'); btn.textContent = STATE.playerDeck.includes(tpl.id) ? 'W decku' : 'UŻYJ'; btn.style.marginTop='8px';
+      btn.addEventListener('click', ()=>{
+        if(STATE.playerDeck.includes(tpl.id)){ log('Karta już w decku.'); return; }
+        if(STATE.playerDeck.length >= 4){
+          const removed = STATE.playerDeck.shift();
+          STATE.playerDeck.push(tpl.id);
+          log('Dodano ' + tpl.name + ' do decku. Usunięto ' + removed + '.');
+        } else {
+          STATE.playerDeck.push(tpl.id);
+          log('Dodano ' + tpl.name + ' do decku.');
+        }
+        renderDCTab(); renderDeckUI(); saveState();
+      });
+      c.appendChild(btn);
+    }
+    grid.appendChild(c);
+  });
+  wrap.appendChild(grid); content.appendChild(wrap);
+}
+
+// -------------- Start & Stop Game --------------
+function startGame(){
+  if(gameStarted) return;
+  gameStarted = true;
+  elixir = Math.min(elixir, MAX_ELIXIR);
+  assignNewAIName();
+  updateElixirUI();
+  startElixirLoop();
+  startAISpawning();
+  startTowerFire();
+  log('Gra rozpoczęta. Przeciwnik: ' + aiName);
+}
+
+function stopAllLoops(){
+  gameStarted = false;
+  if(elixirTimer) clearInterval(elixirTimer);
+  if(aiTimer) clearInterval(aiTimer);
+  if(aiSpawnInterval) clearInterval(aiSpawnInterval);
+  if(towerFireTicker) clearInterval(towerFireTicker);
+}
+
+// -------------- init --------------
+function init(){
+  setupDOM();
+  last = performance.now();
+  requestAnimationFrame(mainLoop);
+  // ensure menus reflect current state
+  updateProfileUI();
+  renderDCTab(); // prebuild collection for quick access
+  saveState();
+}
+
+init();
+
+/* End of script */
+</script>
+</body>
+</html>
